@@ -6,7 +6,10 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::BinaryHeap;
 
 use crate::obstacle_map::GridObstacleMap;
-use crate::types::{GridState, OpenEntry, BlockedCellTracker, RouteStats, DIRECTIONS, ORTHO_COST, DIAG_COST, DEFAULT_TURN_COST};
+use crate::types::{
+    BlockedCellTracker, GridState, OpenEntry, RouteStats, DEFAULT_TURN_COST, DIAG_COST, DIRECTIONS,
+    ORTHO_COST,
+};
 
 /// Grid A* Router
 #[cfg_attr(feature = "python", pyclass)]
@@ -14,28 +17,37 @@ pub struct GridRouter {
     via_cost: i32,
     h_weight: f32,
     turn_cost: i32,
-    via_proximity_cost: i32,  // Multiplier for stub proximity cost when placing vias (0 = block vias near stubs)
-    vertical_attraction_radius: i32,  // Grid units for cross-layer attraction lookup (0 = disabled)
-    vertical_attraction_bonus: i32,   // Cost reduction for positions aligned with other-layer tracks
-    layer_costs: Vec<i32>,  // Per-layer cost multipliers (1000 = 1.0x, 1500 = 1.5x penalty)
-    proximity_heuristic_cost: i32,  // Expected proximity cost per grid step (added to heuristic)
-    layer_direction_preferences: Vec<u8>,  // Per-layer direction preference (0=horizontal, 1=vertical, 255=none)
-    direction_preference_cost: i32,  // Cost penalty for non-preferred direction moves
+    via_proximity_cost: i32, // Multiplier for stub proximity cost when placing vias (0 = block vias near stubs)
+    vertical_attraction_radius: i32, // Grid units for cross-layer attraction lookup (0 = disabled)
+    vertical_attraction_bonus: i32, // Cost reduction for positions aligned with other-layer tracks
+    layer_costs: Vec<i32>,   // Per-layer cost multipliers (1000 = 1.0x, 1500 = 1.5x penalty)
+    proximity_heuristic_cost: i32, // Expected proximity cost per grid step (added to heuristic)
+    layer_direction_preferences: Vec<u8>, // Per-layer direction preference (0=horizontal, 1=vertical, 255=none)
+    direction_preference_cost: i32,       // Cost penalty for non-preferred direction moves
     // Bus routing: attraction to a previously routed path (same layer only)
     // Stores path with direction vectors: (gx, gy, layer, dx, dy) where dx,dy are normalized direction
-    attraction_path: Vec<(i32, i32, u8, i8, i8)>,  // Path to attract to with direction
-    attraction_radius: i32,  // Grid units for attraction (0 = disabled)
-    attraction_bonus: i32,   // Cost reduction when moving parallel to path (same layer)
+    attraction_path: Vec<(i32, i32, u8, i8, i8)>, // Path to attract to with direction
+    attraction_radius: i32,                       // Grid units for attraction (0 = disabled)
+    attraction_bonus: i32, // Cost reduction when moving parallel to path (same layer)
     // Spatial hash for efficient path distance lookup
-    attraction_path_hash: FxHashMap<u64, i32>,  // cell_key -> min distance to path point in that cell
+    attraction_path_hash: FxHashMap<u64, i32>, // cell_key -> min distance to path point in that cell
 }
 
 impl GridRouter {
-    pub fn new_core(via_cost: i32, h_weight: f32, turn_cost: Option<i32>, via_proximity_cost: Option<i32>,
-               vertical_attraction_radius: i32, vertical_attraction_bonus: i32,
-               layer_costs: Option<Vec<i32>>, proximity_heuristic_cost: Option<i32>,
-               layer_direction_preferences: Option<Vec<u8>>, direction_preference_cost: i32,
-               attraction_radius: i32, attraction_bonus: i32) -> Self {
+    pub fn new_core(
+        via_cost: i32,
+        h_weight: f32,
+        turn_cost: Option<i32>,
+        via_proximity_cost: Option<i32>,
+        vertical_attraction_radius: i32,
+        vertical_attraction_bonus: i32,
+        layer_costs: Option<Vec<i32>>,
+        proximity_heuristic_cost: Option<i32>,
+        layer_direction_preferences: Option<Vec<u8>>,
+        direction_preference_cost: i32,
+        attraction_radius: i32,
+        attraction_bonus: i32,
+    ) -> Self {
         Self {
             via_cost,
             h_weight,
@@ -44,7 +56,7 @@ impl GridRouter {
             vertical_attraction_radius,
             vertical_attraction_bonus,
             layer_costs: layer_costs.unwrap_or_default(),
-            proximity_heuristic_cost: proximity_heuristic_cost.unwrap_or(0),  // Default: no proximity estimate
+            proximity_heuristic_cost: proximity_heuristic_cost.unwrap_or(0), // Default: no proximity estimate
             layer_direction_preferences: layer_direction_preferences.unwrap_or_default(),
             direction_preference_cost,
             attraction_path: Vec::new(),
@@ -77,25 +89,29 @@ impl GridRouter {
         // Convert path to include direction vectors
         // Direction at each point is computed from the move to the next point
         // (or from previous point for the last point)
-        let path_with_directions: Vec<(i32, i32, u8, i8, i8)> = path.iter().enumerate().map(|(i, &(gx, gy, layer))| {
-            let (dx, dy) = if i < path.len() - 1 {
-                // Direction to next point
-                let (nx, ny, _) = path[i + 1];
-                let raw_dx = nx - gx;
-                let raw_dy = ny - gy;
-                (raw_dx.signum() as i8, raw_dy.signum() as i8)
-            } else if i > 0 {
-                // Last point: use direction from previous point
-                let (px, py, _) = path[i - 1];
-                let raw_dx = gx - px;
-                let raw_dy = gy - py;
-                (raw_dx.signum() as i8, raw_dy.signum() as i8)
-            } else {
-                // Single point path - no direction
-                (0, 0)
-            };
-            (gx, gy, layer, dx, dy)
-        }).collect();
+        let path_with_directions: Vec<(i32, i32, u8, i8, i8)> = path
+            .iter()
+            .enumerate()
+            .map(|(i, &(gx, gy, layer))| {
+                let (dx, dy) = if i < path.len() - 1 {
+                    // Direction to next point
+                    let (nx, ny, _) = path[i + 1];
+                    let raw_dx = nx - gx;
+                    let raw_dy = ny - gy;
+                    (raw_dx.signum() as i8, raw_dy.signum() as i8)
+                } else if i > 0 {
+                    // Last point: use direction from previous point
+                    let (px, py, _) = path[i - 1];
+                    let raw_dx = gx - px;
+                    let raw_dy = gy - py;
+                    (raw_dx.signum() as i8, raw_dy.signum() as i8)
+                } else {
+                    // Single point path - no direction
+                    (0, 0)
+                };
+                (gx, gy, layer, dx, dy)
+            })
+            .collect();
 
         // Build spatial hash for efficient distance lookups
         // Key: (gx / bucket_size, gy / bucket_size, layer) packed into u64
@@ -157,7 +173,11 @@ impl GridRouter {
         end_direction: Option<(f64, f64)>,
         direction_steps: i32,
         track_margin: i32,
-    ) -> (Option<Vec<(i32, i32, u8)>>, u32, std::collections::HashMap<String, f64>) {
+    ) -> (
+        Option<Vec<(i32, i32, u8)>>,
+        u32,
+        std::collections::HashMap<String, f64>,
+    ) {
         let mut stats = RouteStats::default();
 
         // Convert targets to set for O(1) lookup
@@ -197,12 +217,22 @@ impl GridRouter {
         // This is a continuous (f64, f64) unit vector
         let norm_end_dir: Option<(f64, f64)> = end_direction.map(|(dx, dy)| {
             let len = (dx * dx + dy * dy).sqrt();
-            if len > 0.0 { (dx / len, dy / len) } else { (0.0, 0.0) }
+            if len > 0.0 {
+                (dx / len, dy / len)
+            } else {
+                (0.0, 0.0)
+            }
         });
 
         // Helper: check if position (nx, ny) would violate via exclusion
         // Returns true if blocked (too close to a via and not moving away from it)
-        let check_via_exclusion = |nx: i32, ny: i32, current_gx: i32, current_gy: i32, vias: &[(i32, i32)], radius: i32| -> bool {
+        let check_via_exclusion = |nx: i32,
+                                   ny: i32,
+                                   current_gx: i32,
+                                   current_gy: i32,
+                                   vias: &[(i32, i32)],
+                                   radius: i32|
+         -> bool {
             if radius <= 0 {
                 return false;
             }
@@ -230,7 +260,9 @@ impl GridRouter {
                         let dy_from_via = (ny - vy).abs() - (current_gy - vy).abs();
                         // If moving perpendicular (one axis increases while other decreases)
                         // and still within half the radius, block
-                        if (dx_from_via > 0 && dy_from_via < 0) || (dx_from_via < 0 && dy_from_via > 0) {
+                        if (dx_from_via > 0 && dy_from_via < 0)
+                            || (dx_from_via < 0 && dy_from_via > 0)
+                        {
                             if dist_to_current <= radius / 2 {
                                 return true;
                             }
@@ -241,7 +273,6 @@ impl GridRouter {
             false
         };
 
-
         // Find minimum layer cost for initial g penalty
         let min_layer_cost = self.layer_costs.iter().copied().min().unwrap_or(1000);
         let mut best_initial_h = i32::MAX;
@@ -250,7 +281,11 @@ impl GridRouter {
             let state = GridState::new(gx, gy, layer);
             let key = state.as_key();
             // Penalize starting on expensive layers
-            let layer_cost = self.layer_costs.get(layer as usize).copied().unwrap_or(1000);
+            let layer_cost = self
+                .layer_costs
+                .get(layer as usize)
+                .copied()
+                .unwrap_or(1000);
             let initial_g = layer_cost - min_layer_cost;
             let h = self.heuristic_to_targets(&state, &target_states);
             best_initial_h = best_initial_h.min(h);
@@ -327,7 +362,7 @@ impl GridRouter {
                     stats.closed_set_size = closed.len() as u32;
                     // Count vias in path
                     for i in 1..path.len() {
-                        if path[i].2 != path[i-1].2 {
+                        if path[i].2 != path[i - 1].2 {
                             stats.via_count += 1;
                         }
                     }
@@ -344,11 +379,12 @@ impl GridRouter {
             // 1. If we just came through a via: must continue in exact same direction as before via
             // 2. If we're one step after a via exit: must be within ±45° of the pre-via direction
             // This ensures clean via geometry for differential pairs
-            let (required_direction, allowed_45deg_from): (Option<(i32, i32)>, Option<(i32, i32)>) = if collinear_vias {
-                self.get_via_direction_constraints(&parents, current_key, &current)
-            } else {
-                (None, None)
-            };
+            let (required_direction, allowed_45deg_from): (Option<(i32, i32)>, Option<(i32, i32)>) =
+                if collinear_vias {
+                    self.get_via_direction_constraints(&parents, current_key, &current)
+                } else {
+                    (None, None)
+                };
 
             // Get current node's via list for exclusion checking
             let current_vias: Vec<(i32, i32)> = if via_exclusion_radius > 0 {
@@ -358,7 +394,10 @@ impl GridRouter {
             };
 
             // Get steps from source for direction constraint
-            let current_steps = steps_from_source.get(&current_key).copied().unwrap_or(i32::MAX);
+            let current_steps = steps_from_source
+                .get(&current_key)
+                .copied()
+                .unwrap_or(i32::MAX);
 
             // Get previous direction (parent -> current) for turn cost calculation
             let prev_direction: Option<(i32, i32)> = parents.get(&current_key).map(|&parent_key| {
@@ -400,12 +439,20 @@ impl GridRouter {
                 let ngx = current.gx + dx;
                 let ngy = current.gy + dy;
 
-                if obstacles.is_blocked_with_margin(ngx, ngy, current.layer as usize, track_margin) {
+                if obstacles.is_blocked_with_margin(ngx, ngy, current.layer as usize, track_margin)
+                {
                     continue;
                 }
 
                 // Check via exclusion - can't approach our own vias once we've moved away
-                if check_via_exclusion(ngx, ngy, current.gx, current.gy, &current_vias, via_exclusion_radius) {
+                if check_via_exclusion(
+                    ngx,
+                    ngy,
+                    current.gx,
+                    current.gy,
+                    &current_vias,
+                    via_exclusion_radius,
+                ) {
                     continue;
                 }
 
@@ -416,14 +463,26 @@ impl GridRouter {
                     continue;
                 }
 
-                let base_move_cost = if dx != 0 && dy != 0 { DIAG_COST } else { ORTHO_COST };
+                let base_move_cost = if dx != 0 && dy != 0 {
+                    DIAG_COST
+                } else {
+                    ORTHO_COST
+                };
                 // Apply layer cost multiplier (1000 = 1.0x, 1500 = 1.5x, etc.)
-                let layer_multiplier = self.layer_costs.get(current.layer as usize).copied().unwrap_or(1000);
+                let layer_multiplier = self
+                    .layer_costs
+                    .get(current.layer as usize)
+                    .copied()
+                    .unwrap_or(1000);
                 let move_cost = (base_move_cost as i64 * layer_multiplier as i64 / 1000) as i32;
                 // Add turn cost if direction changes (encourages straighter paths)
                 let turn_cost = match prev_direction {
                     Some((pdx, pdy)) if pdx != 0 || pdy != 0 => {
-                        if dx != pdx || dy != pdy { self.turn_cost } else { 0 }
+                        if dx != pdx || dy != pdy {
+                            self.turn_cost
+                        } else {
+                            0
+                        }
                     }
                     _ => 0, // No previous direction (source node or via)
                 };
@@ -432,20 +491,45 @@ impl GridRouter {
                     + obstacles.get_layer_proximity_cost(ngx, ngy, current.layer as usize);
                 // Subtract attraction bonus for positions aligned with tracks on other layers
                 let attraction_bonus = obstacles.get_cross_layer_attraction(
-                    ngx, ngy, current.layer as usize,
-                    self.vertical_attraction_radius, self.vertical_attraction_bonus);
+                    ngx,
+                    ngy,
+                    current.layer as usize,
+                    self.vertical_attraction_radius,
+                    self.vertical_attraction_bonus,
+                );
                 // Layer direction preference penalty (0=horizontal preferred, 1=vertical preferred)
                 let direction_penalty = if self.direction_preference_cost > 0 {
-                    let preferred = self.layer_direction_preferences.get(current.layer as usize).copied().unwrap_or(255);
+                    let preferred = self
+                        .layer_direction_preferences
+                        .get(current.layer as usize)
+                        .copied()
+                        .unwrap_or(255);
                     match preferred {
-                        0 => if dy != 0 && dx == 0 { self.direction_preference_cost } else { 0 },  // Horizontal pref, penalize pure vertical
-                        1 => if dx != 0 && dy == 0 { self.direction_preference_cost } else { 0 },  // Vertical pref, penalize pure horizontal
-                        _ => 0  // No preference (255 or other)
+                        0 => {
+                            if dy != 0 && dx == 0 {
+                                self.direction_preference_cost
+                            } else {
+                                0
+                            }
+                        } // Horizontal pref, penalize pure vertical
+                        1 => {
+                            if dx != 0 && dy == 0 {
+                                self.direction_preference_cost
+                            } else {
+                                0
+                            }
+                        } // Vertical pref, penalize pure horizontal
+                        _ => 0, // No preference (255 or other)
                     }
-                } else { 0 };
+                } else {
+                    0
+                };
                 // Path attraction bonus for bus routing - direction-based to prevent spiraling
-                let path_attraction_bonus = self.get_path_attraction_bonus(ngx, ngy, current.layer, dx, dy);
-                let new_g = g + move_cost + turn_cost + proximity_cost + direction_penalty - attraction_bonus - path_attraction_bonus;
+                let path_attraction_bonus =
+                    self.get_path_attraction_bonus(ngx, ngy, current.layer, dx, dy);
+                let new_g = g + move_cost + turn_cost + proximity_cost + direction_penalty
+                    - attraction_bonus
+                    - path_attraction_bonus;
 
                 let existing_g = g_costs.get(&neighbor_key).copied().unwrap_or(i32::MAX);
                 if new_g < existing_g {
@@ -497,14 +581,37 @@ impl GridRouter {
                             let approach_dx = current.gx - parent_x;
                             let approach_dy = current.gy - parent_y;
 
-                            if (prev_dx != 0 || prev_dy != 0) && (approach_dx != 0 || approach_dy != 0) {
-                                let norm_prev_dx = if prev_dx != 0 { prev_dx / prev_dx.abs() } else { 0 };
-                                let norm_prev_dy = if prev_dy != 0 { prev_dy / prev_dy.abs() } else { 0 };
-                                let norm_approach_dx = if approach_dx != 0 { approach_dx / approach_dx.abs() } else { 0 };
-                                let norm_approach_dy = if approach_dy != 0 { approach_dy / approach_dy.abs() } else { 0 };
+                            if (prev_dx != 0 || prev_dy != 0)
+                                && (approach_dx != 0 || approach_dy != 0)
+                            {
+                                let norm_prev_dx = if prev_dx != 0 {
+                                    prev_dx / prev_dx.abs()
+                                } else {
+                                    0
+                                };
+                                let norm_prev_dy = if prev_dy != 0 {
+                                    prev_dy / prev_dy.abs()
+                                } else {
+                                    0
+                                };
+                                let norm_approach_dx = if approach_dx != 0 {
+                                    approach_dx / approach_dx.abs()
+                                } else {
+                                    0
+                                };
+                                let norm_approach_dy = if approach_dy != 0 {
+                                    approach_dy / approach_dy.abs()
+                                } else {
+                                    0
+                                };
 
                                 // Approach must be same or within ±45° of previous
-                                Self::is_within_45_degrees(norm_approach_dx, norm_approach_dy, norm_prev_dx, norm_prev_dy)
+                                Self::is_within_45_degrees(
+                                    norm_approach_dx,
+                                    norm_approach_dy,
+                                    norm_prev_dx,
+                                    norm_prev_dy,
+                                )
                             } else {
                                 false
                             }
@@ -523,20 +630,26 @@ impl GridRouter {
             let via_too_close = if via_exclusion_radius > 0 {
                 current_vias.iter().any(|&(vx, vy)| {
                     let dist = (current.gx - vx).abs().max((current.gy - vy).abs());
-                    dist <= via_exclusion_radius * 2  // Need 2x radius for via-via clearance
+                    dist <= via_exclusion_radius * 2 // Need 2x radius for via-via clearance
                 })
             } else {
                 false
             };
 
-            if can_place_via && !via_too_close && !obstacles.is_via_blocked(current.gx, current.gy) {
+            if can_place_via && !via_too_close && !obstacles.is_via_blocked(current.gx, current.gy)
+            {
                 for layer in 0..obstacles.num_layers as u8 {
                     if layer == current.layer {
                         continue;
                     }
 
                     // Check if destination layer is blocked at this position
-                    if obstacles.is_blocked_with_margin(current.gx, current.gy, layer as usize, track_margin) {
+                    if obstacles.is_blocked_with_margin(
+                        current.gx,
+                        current.gy,
+                        layer as usize,
+                        track_margin,
+                    ) {
                         continue;
                     }
 
@@ -550,12 +663,25 @@ impl GridRouter {
                     // Use zero cost for free via positions (through-hole pads on same net)
                     let is_free = obstacles.is_free_via(current.gx, current.gy);
                     let via_cost = if is_free { 0 } else { self.via_cost };
-                    let proximity_cost = (obstacles.get_stub_proximity_cost(current.gx, current.gy)
-                        + obstacles.get_layer_proximity_cost(current.gx, current.gy, layer as usize))
+                    let proximity_cost = (obstacles
+                        .get_stub_proximity_cost(current.gx, current.gy)
+                        + obstacles.get_layer_proximity_cost(
+                            current.gx,
+                            current.gy,
+                            layer as usize,
+                        ))
                         * self.via_proximity_cost;
                     // Layer transition cost: penalize switching TO expensive layers, discount switching to cheaper
-                    let current_layer_cost = self.layer_costs.get(current.layer as usize).copied().unwrap_or(1000);
-                    let dest_layer_cost = self.layer_costs.get(layer as usize).copied().unwrap_or(1000);
+                    let current_layer_cost = self
+                        .layer_costs
+                        .get(current.layer as usize)
+                        .copied()
+                        .unwrap_or(1000);
+                    let dest_layer_cost = self
+                        .layer_costs
+                        .get(layer as usize)
+                        .copied()
+                        .unwrap_or(1000);
                     let layer_transition_cost = dest_layer_cost - current_layer_cost;
                     // Combined via cost can be as low as 0 when switching to a much cheaper layer
                     let combined_via_cost = (via_cost + layer_transition_cost).max(0);
@@ -652,22 +778,42 @@ impl GridRouter {
 
         let norm_end_dir: Option<(f64, f64)> = end_direction.map(|(dx, dy)| {
             let len = (dx * dx + dy * dy).sqrt();
-            if len > 0.0 { (dx / len, dy / len) } else { (0.0, 0.0) }
+            if len > 0.0 {
+                (dx / len, dy / len)
+            } else {
+                (0.0, 0.0)
+            }
         });
 
-        let check_via_exclusion = |nx: i32, ny: i32, current_gx: i32, current_gy: i32, vias: &[(i32, i32)], radius: i32| -> bool {
-            if radius <= 0 { return false; }
+        let check_via_exclusion = |nx: i32,
+                                   ny: i32,
+                                   current_gx: i32,
+                                   current_gy: i32,
+                                   vias: &[(i32, i32)],
+                                   radius: i32|
+         -> bool {
+            if radius <= 0 {
+                return false;
+            }
             for &(vx, vy) in vias {
                 let dist_to_neighbor = (nx - vx).abs().max((ny - vy).abs());
                 let dist_to_current = (current_gx - vx).abs().max((current_gy - vy).abs());
-                if dist_to_neighbor <= radius && dist_to_current > radius { return true; }
+                if dist_to_neighbor <= radius && dist_to_current > radius {
+                    return true;
+                }
                 if dist_to_current <= radius && dist_to_neighbor <= dist_to_current {
-                    if dist_to_neighbor < dist_to_current { return true; }
+                    if dist_to_neighbor < dist_to_current {
+                        return true;
+                    }
                     if dist_to_neighbor == dist_to_current && dist_to_current > 0 {
                         let dx_from_via = (nx - vx).abs() - (current_gx - vx).abs();
                         let dy_from_via = (ny - vy).abs() - (current_gy - vy).abs();
-                        if (dx_from_via > 0 && dy_from_via < 0) || (dx_from_via < 0 && dy_from_via > 0) {
-                            if dist_to_current <= radius / 2 { return true; }
+                        if (dx_from_via > 0 && dy_from_via < 0)
+                            || (dx_from_via < 0 && dy_from_via > 0)
+                        {
+                            if dist_to_current <= radius / 2 {
+                                return true;
+                            }
                         }
                     }
                 }
@@ -682,27 +828,42 @@ impl GridRouter {
             let state = GridState::new(gx, gy, layer);
             let key = state.as_key();
             // Penalize starting on expensive layers
-            let layer_cost = self.layer_costs.get(layer as usize).copied().unwrap_or(1000);
+            let layer_cost = self
+                .layer_costs
+                .get(layer as usize)
+                .copied()
+                .unwrap_or(1000);
             let initial_g = layer_cost - min_layer_cost;
             let h = self.heuristic_to_targets(&state, &target_states);
-            open_set.push(OpenEntry { f_score: initial_g + h, g_score: initial_g, state, counter });
+            open_set.push(OpenEntry {
+                f_score: initial_g + h,
+                g_score: initial_g,
+                state,
+                counter,
+            });
             counter += 1;
             g_costs.insert(key, initial_g);
-            if via_exclusion_radius > 0 { path_vias.insert(key, Vec::new()); }
+            if via_exclusion_radius > 0 {
+                path_vias.insert(key, Vec::new());
+            }
             steps_from_source.insert(key, 0);
         }
 
         let mut iterations: u32 = 0;
 
         while let Some(current_entry) = open_set.pop() {
-            if iterations >= max_iterations { break; }
+            if iterations >= max_iterations {
+                break;
+            }
             iterations += 1;
 
             let current = current_entry.state;
             let current_key = current.as_key();
             let g = current_entry.g_score;
 
-            if closed.contains(&current_key) { continue; }
+            if closed.contains(&current_key) {
+                continue;
+            }
 
             if target_set.contains(&current_key) {
                 let arrival_ok = if let Some((end_dx, end_dy)) = norm_end_dir {
@@ -712,11 +873,18 @@ impl GridRouter {
                         let arrive_dy = (current.gy - py) as f64;
                         let arrive_len = (arrive_dx * arrive_dx + arrive_dy * arrive_dy).sqrt();
                         if arrive_len > 0.0 {
-                            let dot = (arrive_dx / arrive_len) * end_dx + (arrive_dy / arrive_len) * end_dy;
+                            let dot = (arrive_dx / arrive_len) * end_dx
+                                + (arrive_dy / arrive_len) * end_dy;
                             dot >= -0.5
-                        } else { true }
-                    } else { true }
-                } else { true };
+                        } else {
+                            true
+                        }
+                    } else {
+                        true
+                    }
+                } else {
+                    true
+                };
 
                 if arrival_ok {
                     let path = self.reconstruct_path(&parents, current_key, &g_costs);
@@ -729,31 +897,48 @@ impl GridRouter {
 
             let (required_direction, allowed_45deg_from) = if collinear_vias {
                 self.get_via_direction_constraints(&parents, current_key, &current)
-            } else { (None, None) };
+            } else {
+                (None, None)
+            };
 
             let current_vias: Vec<(i32, i32)> = if via_exclusion_radius > 0 {
                 path_vias.get(&current_key).cloned().unwrap_or_default()
-            } else { Vec::new() };
+            } else {
+                Vec::new()
+            };
 
-            let current_steps = steps_from_source.get(&current_key).copied().unwrap_or(i32::MAX);
+            let current_steps = steps_from_source
+                .get(&current_key)
+                .copied()
+                .unwrap_or(i32::MAX);
 
             // Get previous direction (parent -> current) for turn cost calculation
             let prev_direction: Option<(i32, i32)> = parents.get(&current_key).map(|&parent_key| {
                 let (px, py, _) = Self::unpack_key(parent_key);
                 let pdx = current.gx - px;
                 let pdy = current.gy - py;
-                if pdx == 0 && pdy == 0 { (0, 0) } else { (pdx.signum(), pdy.signum()) }
+                if pdx == 0 && pdy == 0 {
+                    (0, 0)
+                } else {
+                    (pdx.signum(), pdy.signum())
+                }
             });
 
             for (dx, dy) in DIRECTIONS {
                 if let Some((req_dx, req_dy)) = required_direction {
-                    if dx != req_dx || dy != req_dy { continue; }
+                    if dx != req_dx || dy != req_dy {
+                        continue;
+                    }
                 } else if let Some((base_dx, base_dy)) = allowed_45deg_from {
-                    if !Self::is_within_45_degrees(dx, dy, base_dx, base_dy) { continue; }
+                    if !Self::is_within_45_degrees(dx, dy, base_dx, base_dy) {
+                        continue;
+                    }
                 }
 
                 if let Some((start_dx, start_dy)) = norm_start_dir {
-                    if current_steps < direction_steps && !Self::is_within_45_degrees(dx, dy, start_dx, start_dy) {
+                    if current_steps < direction_steps
+                        && !Self::is_within_45_degrees(dx, dy, start_dx, start_dy)
+                    {
                         continue;
                     }
                 }
@@ -761,27 +946,49 @@ impl GridRouter {
                 let ngx = current.gx + dx;
                 let ngy = current.gy + dy;
 
-                if obstacles.is_blocked_with_margin(ngx, ngy, current.layer as usize, track_margin) {
+                if obstacles.is_blocked_with_margin(ngx, ngy, current.layer as usize, track_margin)
+                {
                     tracker.track(ngx, ngy, current.layer);
                     continue;
                 }
 
-                if check_via_exclusion(ngx, ngy, current.gx, current.gy, &current_vias, via_exclusion_radius) {
+                if check_via_exclusion(
+                    ngx,
+                    ngy,
+                    current.gx,
+                    current.gy,
+                    &current_vias,
+                    via_exclusion_radius,
+                ) {
                     continue;
                 }
 
                 let neighbor = GridState::new(ngx, ngy, current.layer);
                 let neighbor_key = neighbor.as_key();
 
-                if closed.contains(&neighbor_key) { continue; }
+                if closed.contains(&neighbor_key) {
+                    continue;
+                }
 
-                let base_move_cost = if dx != 0 && dy != 0 { DIAG_COST } else { ORTHO_COST };
+                let base_move_cost = if dx != 0 && dy != 0 {
+                    DIAG_COST
+                } else {
+                    ORTHO_COST
+                };
                 // Apply layer cost multiplier (1000 = 1.0x, 1500 = 1.5x, etc.)
-                let layer_multiplier = self.layer_costs.get(current.layer as usize).copied().unwrap_or(1000);
+                let layer_multiplier = self
+                    .layer_costs
+                    .get(current.layer as usize)
+                    .copied()
+                    .unwrap_or(1000);
                 let move_cost = (base_move_cost as i64 * layer_multiplier as i64 / 1000) as i32;
                 let turn_cost = match prev_direction {
                     Some((pdx, pdy)) if pdx != 0 || pdy != 0 => {
-                        if dx != pdx || dy != pdy { self.turn_cost } else { 0 }
+                        if dx != pdx || dy != pdy {
+                            self.turn_cost
+                        } else {
+                            0
+                        }
                     }
                     _ => 0,
                 };
@@ -790,29 +997,61 @@ impl GridRouter {
                     + obstacles.get_layer_proximity_cost(ngx, ngy, current.layer as usize);
                 // Subtract attraction bonus for positions aligned with tracks on other layers
                 let attraction_bonus = obstacles.get_cross_layer_attraction(
-                    ngx, ngy, current.layer as usize,
-                    self.vertical_attraction_radius, self.vertical_attraction_bonus);
+                    ngx,
+                    ngy,
+                    current.layer as usize,
+                    self.vertical_attraction_radius,
+                    self.vertical_attraction_bonus,
+                );
                 // Layer direction preference penalty (0=horizontal preferred, 1=vertical preferred)
                 let direction_penalty = if self.direction_preference_cost > 0 {
-                    let preferred = self.layer_direction_preferences.get(current.layer as usize).copied().unwrap_or(255);
+                    let preferred = self
+                        .layer_direction_preferences
+                        .get(current.layer as usize)
+                        .copied()
+                        .unwrap_or(255);
                     match preferred {
-                        0 => if dy != 0 && dx == 0 { self.direction_preference_cost } else { 0 },
-                        1 => if dx != 0 && dy == 0 { self.direction_preference_cost } else { 0 },
-                        _ => 0
+                        0 => {
+                            if dy != 0 && dx == 0 {
+                                self.direction_preference_cost
+                            } else {
+                                0
+                            }
+                        }
+                        1 => {
+                            if dx != 0 && dy == 0 {
+                                self.direction_preference_cost
+                            } else {
+                                0
+                            }
+                        }
+                        _ => 0,
                     }
-                } else { 0 };
+                } else {
+                    0
+                };
                 // Path attraction bonus for bus routing - direction-based to prevent spiraling
-                let path_attraction_bonus = self.get_path_attraction_bonus(ngx, ngy, current.layer, dx, dy);
-                let new_g = g + move_cost + turn_cost + proximity_cost + direction_penalty - attraction_bonus - path_attraction_bonus;
+                let path_attraction_bonus =
+                    self.get_path_attraction_bonus(ngx, ngy, current.layer, dx, dy);
+                let new_g = g + move_cost + turn_cost + proximity_cost + direction_penalty
+                    - attraction_bonus
+                    - path_attraction_bonus;
 
                 let existing_g = g_costs.get(&neighbor_key).copied().unwrap_or(i32::MAX);
                 if new_g < existing_g {
                     g_costs.insert(neighbor_key, new_g);
                     parents.insert(neighbor_key, current_key);
-                    if via_exclusion_radius > 0 { path_vias.insert(neighbor_key, current_vias.clone()); }
+                    if via_exclusion_radius > 0 {
+                        path_vias.insert(neighbor_key, current_vias.clone());
+                    }
                     steps_from_source.insert(neighbor_key, current_steps + 1);
                     let h = self.heuristic_to_targets(&neighbor, &target_states);
-                    open_set.push(OpenEntry { f_score: new_g + h, g_score: new_g, state: neighbor, counter });
+                    open_set.push(OpenEntry {
+                        f_score: new_g + h,
+                        g_score: new_g,
+                        state: neighbor,
+                        counter,
+                    });
                     counter += 1;
                 }
             }
@@ -821,37 +1060,79 @@ impl GridRouter {
             let can_place_via = if collinear_vias {
                 if let Some(&parent_key) = parents.get(&current_key) {
                     if let Some(&grandparent_key) = parents.get(&parent_key) {
-                        if !parents.contains_key(&grandparent_key) { false }
-                        else {
+                        if !parents.contains_key(&grandparent_key) {
+                            false
+                        } else {
                             let (parent_x, parent_y, _) = Self::unpack_key(parent_key);
                             let (gp_x, gp_y, _) = Self::unpack_key(grandparent_key);
                             let prev_dx = parent_x - gp_x;
                             let prev_dy = parent_y - gp_y;
                             let approach_dx = current.gx - parent_x;
                             let approach_dy = current.gy - parent_y;
-                            if (prev_dx != 0 || prev_dy != 0) && (approach_dx != 0 || approach_dy != 0) {
-                                let norm_prev_dx = if prev_dx != 0 { prev_dx / prev_dx.abs() } else { 0 };
-                                let norm_prev_dy = if prev_dy != 0 { prev_dy / prev_dy.abs() } else { 0 };
-                                let norm_approach_dx = if approach_dx != 0 { approach_dx / approach_dx.abs() } else { 0 };
-                                let norm_approach_dy = if approach_dy != 0 { approach_dy / approach_dy.abs() } else { 0 };
-                                Self::is_within_45_degrees(norm_approach_dx, norm_approach_dy, norm_prev_dx, norm_prev_dy)
-                            } else { false }
+                            if (prev_dx != 0 || prev_dy != 0)
+                                && (approach_dx != 0 || approach_dy != 0)
+                            {
+                                let norm_prev_dx = if prev_dx != 0 {
+                                    prev_dx / prev_dx.abs()
+                                } else {
+                                    0
+                                };
+                                let norm_prev_dy = if prev_dy != 0 {
+                                    prev_dy / prev_dy.abs()
+                                } else {
+                                    0
+                                };
+                                let norm_approach_dx = if approach_dx != 0 {
+                                    approach_dx / approach_dx.abs()
+                                } else {
+                                    0
+                                };
+                                let norm_approach_dy = if approach_dy != 0 {
+                                    approach_dy / approach_dy.abs()
+                                } else {
+                                    0
+                                };
+                                Self::is_within_45_degrees(
+                                    norm_approach_dx,
+                                    norm_approach_dy,
+                                    norm_prev_dx,
+                                    norm_prev_dy,
+                                )
+                            } else {
+                                false
+                            }
                         }
-                    } else { false }
-                } else { false }
-            } else { true };
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            } else {
+                true
+            };
 
             let via_too_close = if via_exclusion_radius > 0 {
                 current_vias.iter().any(|&(vx, vy)| {
                     (current.gx - vx).abs().max((current.gy - vy).abs()) <= via_exclusion_radius * 2
                 })
-            } else { false };
+            } else {
+                false
+            };
 
-            if can_place_via && !via_too_close && !obstacles.is_via_blocked(current.gx, current.gy) {
+            if can_place_via && !via_too_close && !obstacles.is_via_blocked(current.gx, current.gy)
+            {
                 for layer in 0..obstacles.num_layers as u8 {
-                    if layer == current.layer { continue; }
+                    if layer == current.layer {
+                        continue;
+                    }
 
-                    if obstacles.is_blocked_with_margin(current.gx, current.gy, layer as usize, track_margin) {
+                    if obstacles.is_blocked_with_margin(
+                        current.gx,
+                        current.gy,
+                        layer as usize,
+                        track_margin,
+                    ) {
                         tracker.track(current.gx, current.gy, layer);
                         continue;
                     }
@@ -859,17 +1140,32 @@ impl GridRouter {
                     let neighbor = GridState::new(current.gx, current.gy, layer);
                     let neighbor_key = neighbor.as_key();
 
-                    if closed.contains(&neighbor_key) { continue; }
+                    if closed.contains(&neighbor_key) {
+                        continue;
+                    }
 
                     // Use zero cost for free via positions (through-hole pads on same net)
                     let is_free = obstacles.is_free_via(current.gx, current.gy);
                     let via_cost = if is_free { 0 } else { self.via_cost };
-                    let proximity_cost = (obstacles.get_stub_proximity_cost(current.gx, current.gy)
-                        + obstacles.get_layer_proximity_cost(current.gx, current.gy, layer as usize))
+                    let proximity_cost = (obstacles
+                        .get_stub_proximity_cost(current.gx, current.gy)
+                        + obstacles.get_layer_proximity_cost(
+                            current.gx,
+                            current.gy,
+                            layer as usize,
+                        ))
                         * self.via_proximity_cost;
                     // Layer transition cost: penalize switching TO expensive layers, discount switching to cheaper
-                    let current_layer_cost = self.layer_costs.get(current.layer as usize).copied().unwrap_or(1000);
-                    let dest_layer_cost = self.layer_costs.get(layer as usize).copied().unwrap_or(1000);
+                    let current_layer_cost = self
+                        .layer_costs
+                        .get(current.layer as usize)
+                        .copied()
+                        .unwrap_or(1000);
+                    let dest_layer_cost = self
+                        .layer_costs
+                        .get(layer as usize)
+                        .copied()
+                        .unwrap_or(1000);
                     let layer_transition_cost = dest_layer_cost - current_layer_cost;
                     // Combined via cost can be as low as 0 when switching to a much cheaper layer
                     let combined_via_cost = (via_cost + layer_transition_cost).max(0);
@@ -891,7 +1187,12 @@ impl GridRouter {
                         }
                         steps_from_source.insert(neighbor_key, current_steps);
                         let h = self.heuristic_to_targets(&neighbor, &target_states);
-                        open_set.push(OpenEntry { f_score: new_g + h, g_score: new_g, state: neighbor, counter });
+                        open_set.push(OpenEntry {
+                            f_score: new_g + h,
+                            g_score: new_g,
+                            state: neighbor,
+                            counter,
+                        });
                         counter += 1;
                     }
                 }
@@ -907,11 +1208,20 @@ impl GridRouter {
 impl GridRouter {
     #[new]
     #[pyo3(signature = (via_cost, h_weight, turn_cost=None, via_proximity_cost=1, vertical_attraction_radius=0, vertical_attraction_bonus=0, layer_costs=None, proximity_heuristic_cost=None, layer_direction_preferences=None, direction_preference_cost=0, attraction_radius=0, attraction_bonus=0))]
-    pub fn new(via_cost: i32, h_weight: f32, turn_cost: Option<i32>, via_proximity_cost: Option<i32>,
-               vertical_attraction_radius: i32, vertical_attraction_bonus: i32,
-               layer_costs: Option<Vec<i32>>, proximity_heuristic_cost: Option<i32>,
-               layer_direction_preferences: Option<Vec<u8>>, direction_preference_cost: i32,
-               attraction_radius: i32, attraction_bonus: i32) -> Self {
+    pub fn new(
+        via_cost: i32,
+        h_weight: f32,
+        turn_cost: Option<i32>,
+        via_proximity_cost: Option<i32>,
+        vertical_attraction_radius: i32,
+        vertical_attraction_bonus: i32,
+        layer_costs: Option<Vec<i32>>,
+        proximity_heuristic_cost: Option<i32>,
+        layer_direction_preferences: Option<Vec<u8>>,
+        direction_preference_cost: i32,
+        attraction_radius: i32,
+        attraction_bonus: i32,
+    ) -> Self {
         Self::new_core(
             via_cost,
             h_weight,
@@ -953,7 +1263,11 @@ impl GridRouter {
         end_direction: Option<(f64, f64)>,
         direction_steps: i32,
         track_margin: i32,
-    ) -> (Option<Vec<(i32, i32, u8)>>, u32, std::collections::HashMap<String, f64>) {
+    ) -> (
+        Option<Vec<(i32, i32, u8)>>,
+        u32,
+        std::collections::HashMap<String, f64>,
+    ) {
         self.route_multi_core(
             obstacles,
             sources,
@@ -1043,8 +1357,16 @@ impl GridRouter {
             let y = ((current_key >> 8) & 0xFFFFF) as i32;
             let x = ((current_key >> 28) & 0xFFFFF) as i32;
             // Handle negative coordinates (sign extension)
-            let x = if x & 0x80000 != 0 { x | !0xFFFFF_i32 } else { x };
-            let y = if y & 0x80000 != 0 { y | !0xFFFFF_i32 } else { y };
+            let x = if x & 0x80000 != 0 {
+                x | !0xFFFFF_i32
+            } else {
+                x
+            };
+            let y = if y & 0x80000 != 0 {
+                y | !0xFFFFF_i32
+            } else {
+                y
+            };
 
             path.push((x, y, layer));
 
@@ -1064,8 +1386,16 @@ impl GridRouter {
         let layer = (key & 0xFF) as u8;
         let y = ((key >> 8) & 0xFFFFF) as i32;
         let x = ((key >> 28) & 0xFFFFF) as i32;
-        let x = if x & 0x80000 != 0 { x | !0xFFFFF_i32 } else { x };
-        let y = if y & 0x80000 != 0 { y | !0xFFFFF_i32 } else { y };
+        let x = if x & 0x80000 != 0 {
+            x | !0xFFFFF_i32
+        } else {
+            x
+        };
+        let y = if y & 0x80000 != 0 {
+            y | !0xFFFFF_i32
+        } else {
+            y
+        };
         (x, y, layer)
     }
 
@@ -1092,14 +1422,14 @@ impl GridRouter {
     #[inline]
     fn direction_to_index(dx: i32, dy: i32) -> usize {
         match (dx, dy) {
-            (1, 0) => 0,    // E
-            (1, -1) => 1,   // NE
-            (0, -1) => 2,   // N
-            (-1, -1) => 3,  // NW
-            (-1, 0) => 4,   // W
-            (-1, 1) => 5,   // SW
-            (0, 1) => 6,    // S
-            (1, 1) => 7,    // SE
+            (1, 0) => 0,   // E
+            (1, -1) => 1,  // NE
+            (0, -1) => 2,  // N
+            (-1, -1) => 3, // NW
+            (-1, 0) => 4,  // W
+            (-1, 1) => 5,  // SW
+            (0, 1) => 6,   // S
+            (1, 1) => 7,   // SE
             _ => 0,
         }
     }
@@ -1120,7 +1450,8 @@ impl GridRouter {
         let (parent_x, parent_y, parent_layer) = Self::unpack_key(parent_key);
 
         // Check if parent was a via (same position as current, different layer)
-        let parent_is_via = parent_x == current.gx && parent_y == current.gy && parent_layer != current.layer;
+        let parent_is_via =
+            parent_x == current.gx && parent_y == current.gy && parent_layer != current.layer;
 
         if parent_is_via {
             // We just came through a via - need exact same direction as before via
@@ -1217,8 +1548,18 @@ impl GridRouter {
     /// - layer: Current layer
     /// - move_dx, move_dy: Direction of the current move (normalized to -1, 0, 1)
     #[inline]
-    fn get_path_attraction_bonus(&self, x: i32, y: i32, layer: u8, move_dx: i32, move_dy: i32) -> i32 {
-        if self.attraction_bonus <= 0 || self.attraction_radius <= 0 || self.attraction_path.is_empty() {
+    fn get_path_attraction_bonus(
+        &self,
+        x: i32,
+        y: i32,
+        layer: u8,
+        move_dx: i32,
+        move_dy: i32,
+    ) -> i32 {
+        if self.attraction_bonus <= 0
+            || self.attraction_radius <= 0
+            || self.attraction_path.is_empty()
+        {
             return 0;
         }
 
@@ -1269,7 +1610,8 @@ impl GridRouter {
         let alignment = if dot >= 2 { 100 } else { 70 };
 
         // Proximity factor with quadratic falloff (stronger near path)
-        let proximity_ratio = (self.attraction_radius - nearest_dist) as f32 / self.attraction_radius as f32;
+        let proximity_ratio =
+            (self.attraction_radius - nearest_dist) as f32 / self.attraction_radius as f32;
         let proximity_pct = (proximity_ratio * proximity_ratio * 100.0) as i32;
 
         // Calculate bonus: base * proximity% * alignment%
@@ -1295,17 +1637,30 @@ impl GridRouter {
         // Computed metrics
         if stats.initial_h > 0 && stats.final_g > 0 {
             // Heuristic efficiency: h/g ratio (1.0 = perfect, <1.0 = underestimate, >1.0 = inadmissible)
-            dict.insert("heuristic_ratio".to_string(), stats.initial_h as f64 / stats.final_g as f64);
+            dict.insert(
+                "heuristic_ratio".to_string(),
+                stats.initial_h as f64 / stats.final_g as f64,
+            );
         }
         if stats.path_length > 0 {
             // Expansion ratio: cells expanded / path length (lower = more efficient)
-            dict.insert("expansion_ratio".to_string(), stats.cells_expanded as f64 / stats.path_length as f64);
+            dict.insert(
+                "expansion_ratio".to_string(),
+                stats.cells_expanded as f64 / stats.path_length as f64,
+            );
             // Revisit ratio: how often we improved paths
-            dict.insert("revisit_ratio".to_string(), stats.cells_revisited as f64 / stats.cells_expanded as f64);
+            dict.insert(
+                "revisit_ratio".to_string(),
+                stats.cells_revisited as f64 / stats.cells_expanded as f64,
+            );
         }
         if stats.cells_expanded > 0 {
             // Skip ratio: duplicate pops from open set
-            dict.insert("skip_ratio".to_string(), stats.duplicate_skips as f64 / (stats.cells_expanded + stats.duplicate_skips) as f64);
+            dict.insert(
+                "skip_ratio".to_string(),
+                stats.duplicate_skips as f64
+                    / (stats.cells_expanded + stats.duplicate_skips) as f64,
+            );
         }
 
         dict

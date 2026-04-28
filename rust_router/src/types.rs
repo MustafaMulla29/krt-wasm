@@ -1,7 +1,7 @@
 //! Shared types and constants for the grid router.
 
-use std::cmp::Ordering;
 use rustc_hash::FxHashSet;
+use std::cmp::Ordering;
 
 /// 8 directions for octilinear routing
 pub const DIRECTIONS: [(i32, i32); 8] = [
@@ -17,7 +17,7 @@ pub const DIRECTIONS: [(i32, i32); 8] = [
 
 pub const ORTHO_COST: i32 = 1000;
 pub const DIAG_COST: i32 = 1414; // sqrt(2) * 1000
-pub const DEFAULT_TURN_COST: i32 = 1000;  // Default penalty for changing direction (encourages straighter paths)
+pub const DEFAULT_TURN_COST: i32 = 1000; // Default penalty for changing direction (encourages straighter paths)
 
 /// Pack (gx, gy) into a single u64 for fast hashing
 #[inline]
@@ -63,7 +63,9 @@ pub struct OpenEntry {
 impl Ord for OpenEntry {
     fn cmp(&self, other: &Self) -> Ordering {
         // Reverse ordering for min-heap (lowest f_score first)
-        other.f_score.cmp(&self.f_score)
+        other
+            .f_score
+            .cmp(&self.f_score)
             .then_with(|| other.counter.cmp(&self.counter))
     }
 }
@@ -79,14 +81,19 @@ impl PartialOrd for OpenEntry {
 pub struct PoseState {
     pub gx: i32,
     pub gy: i32,
-    pub theta_idx: u8,  // 0-7, corresponding to DIRECTIONS indices
+    pub theta_idx: u8, // 0-7, corresponding to DIRECTIONS indices
     pub layer: u8,
 }
 
 impl PoseState {
     #[inline]
     pub fn new(gx: i32, gy: i32, theta_idx: u8, layer: u8) -> Self {
-        Self { gx, gy, theta_idx, layer }
+        Self {
+            gx,
+            gy,
+            theta_idx,
+            layer,
+        }
     }
 
     #[inline]
@@ -133,7 +140,9 @@ impl PartialEq for PoseOpenEntry {
 impl Ord for PoseOpenEntry {
     fn cmp(&self, other: &Self) -> Ordering {
         // Reverse ordering for min-heap (lowest f_score first)
-        other.f_score.cmp(&self.f_score)
+        other
+            .f_score
+            .cmp(&self.f_score)
             .then_with(|| other.counter.cmp(&self.counter))
     }
 }
@@ -174,9 +183,7 @@ impl BlockedCellTracker {
             // Return all cells, sorted for determinism
             let mut keys: Vec<u64> = self.blocked.iter().copied().collect();
             keys.sort_unstable();
-            keys.iter()
-                .map(|&key| Self::unpack_key(key))
-                .collect()
+            keys.iter().map(|&key| Self::unpack_key(key)).collect()
         } else {
             // Evenly sample MAX_BLOCKED_CELLS from sorted keys
             let mut keys: Vec<u64> = self.blocked.iter().copied().collect();
@@ -200,11 +207,18 @@ impl BlockedCellTracker {
         let y = ((key >> 8) & 0xFFFFF) as i32;
         let x = ((key >> 28) & 0xFFFFF) as i32;
         // Sign extension for negative coordinates
-        let x = if x & 0x80000 != 0 { x | !0xFFFFF_i32 } else { x };
-        let y = if y & 0x80000 != 0 { y | !0xFFFFF_i32 } else { y };
+        let x = if x & 0x80000 != 0 {
+            x | !0xFFFFF_i32
+        } else {
+            x
+        };
+        let y = if y & 0x80000 != 0 {
+            y | !0xFFFFF_i32
+        } else {
+            y
+        };
         (x, y, layer)
     }
-
 }
 
 impl Default for BlockedCellTracker {

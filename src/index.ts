@@ -101,6 +101,7 @@ export class KiCadRoutingToolsAutorouter implements GenericLocalAutorouter {
       this.input,
       normalizeOptions(this.options),
     ) as SimplifiedPcbTrace[]
+    this.cachedTraces = collapseShortSameLayerTunnels(this.cachedTraces)
     return this.cachedTraces
   }
 
@@ -153,4 +154,79 @@ function normalizeOptions(options: KiCadRoutingToolsAutorouterOptions) {
     layerDirectionPreferences: options.layerDirectionPreferences,
     directionPreferenceCost: options.directionPreferenceCost ?? 0,
   }
+}
+
+function collapseShortSameLayerTunnels(
+  traces: SimplifiedPcbTrace[],
+): SimplifiedPcbTrace[] {
+  return traces.map((trace: any) => ({
+    ...trace,
+    route: collapseTraceRoute(trace.route ?? [], 1),
+  }))
+}
+
+function collapseTraceRoute(route: any[], maxTunnelLength: number) {
+  const collapsed = []
+  let index = 0
+
+  while (index < route.length) {
+    const replacement = getShortTunnelReplacement(
+      route.slice(index),
+      maxTunnelLength,
+    )
+    if (replacement) {
+      collapsed.push(replacement)
+      index += 6
+      continue
+    }
+
+    collapsed.push(route[index])
+    index += 1
+  }
+
+  return collapsed
+}
+
+function getShortTunnelReplacement(route: any[], maxTunnelLength: number) {
+  const [start, viaIn, innerStart, innerEnd, viaOut, end] = route
+  if (
+    start?.route_type !== "wire" ||
+    viaIn?.route_type !== "via" ||
+    innerStart?.route_type !== "wire" ||
+    innerEnd?.route_type !== "wire" ||
+    viaOut?.route_type !== "via" ||
+    end?.route_type !== "wire"
+  ) {
+    return null
+  }
+
+  if (
+    start.layer !== viaIn.from_layer ||
+    viaIn.to_layer !== innerStart.layer ||
+    innerStart.layer !== innerEnd.layer ||
+    viaOut.from_layer !== innerStart.layer ||
+    viaOut.to_layer !== start.layer ||
+    end.layer !== start.layer ||
+    !samePoint(start, viaIn) ||
+    !samePoint(start, innerStart) ||
+    !samePoint(innerEnd, viaOut) ||
+    !samePoint(innerEnd, end)
+  ) {
+    return null
+  }
+
+  const tunnelLength = Math.hypot(end.x - start.x, end.y - start.y)
+  if (tunnelLength > maxTunnelLength) return null
+
+  return {
+    route_type: "wire",
+    x: end.x,
+    y: end.y,
+    layer: start.layer,
+    width: start.width,
+  }
+}
+
+function samePoint(a: { x: number; y: number }, b: { x: number; y: number }) {
+  return Math.abs(a.x - b.x) < 1e-6 && Math.abs(a.y - b.y) < 1e-6
 }

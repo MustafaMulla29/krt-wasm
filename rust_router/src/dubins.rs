@@ -12,14 +12,14 @@ pub struct DubinsCalculator {
 
 impl DubinsCalculator {
     pub fn new(min_radius: f64) -> Self {
-        Self { min_radius: min_radius.max(0.1) }
+        Self {
+            min_radius: min_radius.max(0.1),
+        }
     }
 
     /// Calculate shortest Dubins path length between two poses
     /// Returns path length in grid units (scaled by 1000 for integer math)
-    pub fn path_length(&self,
-                   x1: f64, y1: f64, theta1: f64,
-                   x2: f64, y2: f64, theta2: f64) -> i32 {
+    pub fn path_length(&self, x1: f64, y1: f64, theta1: f64, x2: f64, y2: f64, theta2: f64) -> i32 {
         let r = self.min_radius;
 
         // Vector from start to goal

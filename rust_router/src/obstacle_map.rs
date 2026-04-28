@@ -1,9 +1,9 @@
 //! Grid-based obstacle map for PCB routing.
 
 #[cfg(feature = "python")]
-use pyo3::prelude::*;
-#[cfg(feature = "python")]
 use numpy::PyReadonlyArray2;
+#[cfg(feature = "python")]
+use pyo3::prelude::*;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::types::pack_xy;
@@ -150,8 +150,15 @@ impl GridObstacleMap {
         let source_target_count: usize = self.source_target_cells.iter().map(|s| s.len()).sum();
         let free_vias_count = self.free_via_positions.len();
 
-        (blocked_cells_count, blocked_vias_count, stub_proximity_count,
-         layer_proximity_count, cross_layer_count, source_target_count, free_vias_count)
+        (
+            blocked_cells_count,
+            blocked_vias_count,
+            stub_proximity_count,
+            layer_proximity_count,
+            cross_layer_count,
+            source_target_count,
+            free_vias_count,
+        )
     }
 
     /// Clear stub proximity costs and zone centers (for reuse with different stubs)
@@ -347,9 +354,12 @@ impl GridObstacleMap {
         let key = pack_xy(gx, gy);
 
         // Check if inside any BGA zone
-        let in_bga_zone = self.bga_zones.iter().any(|(min_gx, min_gy, max_gx, max_gy)| {
-            gx >= *min_gx && gx <= *max_gx && gy >= *min_gy && gy <= *max_gy
-        });
+        let in_bga_zone = self
+            .bga_zones
+            .iter()
+            .any(|(min_gx, min_gy, max_gx, max_gy)| {
+                gx >= *min_gx && gx <= *max_gx && gy >= *min_gy && gy <= *max_gy
+            });
 
         // Check if cell is in blocked_cells (tracks, stubs, pads from other nets)
         // With ref counting, presence in the map means count > 0 (we remove entries at 0)
@@ -429,8 +439,11 @@ impl GridObstacleMap {
             let expanded_min_gy = min_gy - self.bga_proximity_radius;
             let expanded_max_gx = max_gx + self.bga_proximity_radius;
             let expanded_max_gy = max_gy + self.bga_proximity_radius;
-            if gx >= expanded_min_gx && gx <= expanded_max_gx &&
-               gy >= expanded_min_gy && gy <= expanded_max_gy {
+            if gx >= expanded_min_gx
+                && gx <= expanded_max_gx
+                && gy >= expanded_min_gy
+                && gy <= expanded_max_gy
+            {
                 return true;
             }
         }
@@ -442,7 +455,13 @@ impl GridObstacleMap {
     #[inline]
     pub fn is_in_any_proximity_zone(&self, gx: i32, gy: i32) -> bool {
         // Check stub proximity (has non-zero cost at this position)
-        if self.stub_proximity.get(&pack_xy(gx, gy)).copied().unwrap_or(0) > 0 {
+        if self
+            .stub_proximity
+            .get(&pack_xy(gx, gy))
+            .copied()
+            .unwrap_or(0)
+            > 0
+        {
             return true;
         }
         // Check BGA proximity
@@ -464,7 +483,10 @@ impl GridObstacleMap {
                 }
             }
         }
-        self.stub_proximity.get(&pack_xy(gx, gy)).copied().unwrap_or(0)
+        self.stub_proximity
+            .get(&pack_xy(gx, gy))
+            .copied()
+            .unwrap_or(0)
     }
 
     /// Set layer-specific proximity cost (for track proximity on same layer)
@@ -546,9 +568,12 @@ impl GridObstacleMap {
         }
 
         // No attraction bonus inside BGA exclusion zones (but allow within proximity radius)
-        let in_bga_zone = self.bga_zones.iter().any(|(min_gx, min_gy, max_gx, max_gy)| {
-            gx >= *min_gx && gx <= *max_gx && gy >= *min_gy && gy <= *max_gy
-        });
+        let in_bga_zone = self
+            .bga_zones
+            .iter()
+            .any(|(min_gx, min_gy, max_gx, max_gy)| {
+                gx >= *min_gx && gx <= *max_gx && gy >= *min_gy && gy <= *max_gy
+            });
         if in_bga_zone {
             return 0;
         }
@@ -804,13 +829,7 @@ impl GridObstacleMap {
         attraction_radius: i32,
         attraction_bonus: i32,
     ) -> i32 {
-        self.get_cross_layer_attraction(
-            gx,
-            gy,
-            current_layer,
-            attraction_radius,
-            attraction_bonus,
-        )
+        self.get_cross_layer_attraction(gx, gy, current_layer, attraction_radius, attraction_bonus)
     }
 
     #[pyo3(name = "clear_cross_layer_tracks")]

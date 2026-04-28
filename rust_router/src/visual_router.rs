@@ -5,7 +5,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::BinaryHeap;
 
 use crate::obstacle_map::GridObstacleMap;
-use crate::types::{GridState, OpenEntry, DIRECTIONS, ORTHO_COST, DIAG_COST, DEFAULT_TURN_COST};
+use crate::types::{GridState, OpenEntry, DEFAULT_TURN_COST, DIAG_COST, DIRECTIONS, ORTHO_COST};
 
 /// Search state snapshot for visualization
 #[pyclass]
@@ -47,11 +47,11 @@ pub struct VisualRouter {
     via_cost: i32,
     h_weight: f32,
     turn_cost: i32,
-    via_proximity_cost: i32,  // Multiplier for stub proximity cost when placing vias
-    vertical_attraction_radius: i32,  // Grid units for cross-layer attraction lookup (0 = disabled)
-    vertical_attraction_bonus: i32,   // Cost reduction for positions aligned with other-layer tracks
-    layer_costs: Vec<i32>,  // Per-layer cost multipliers (1000 = 1.0x, 1500 = 1.5x penalty)
-    proximity_heuristic_cost: i32,  // Expected proximity cost per grid step (added to heuristic)
+    via_proximity_cost: i32, // Multiplier for stub proximity cost when placing vias
+    vertical_attraction_radius: i32, // Grid units for cross-layer attraction lookup (0 = disabled)
+    vertical_attraction_bonus: i32, // Cost reduction for positions aligned with other-layer tracks
+    layer_costs: Vec<i32>,   // Per-layer cost multipliers (1000 = 1.0x, 1500 = 1.5x penalty)
+    proximity_heuristic_cost: i32, // Expected proximity cost per grid step (added to heuristic)
     // Search state
     open_set: BinaryHeap<OpenEntry>,
     g_costs: FxHashMap<u64, i32>,
@@ -75,9 +75,16 @@ pub struct VisualRouter {
 impl VisualRouter {
     #[new]
     #[pyo3(signature = (via_cost, h_weight, turn_cost=None, via_proximity_cost=1, vertical_attraction_radius=0, vertical_attraction_bonus=0, layer_costs=None, proximity_heuristic_cost=0))]
-    pub fn new(via_cost: i32, h_weight: f32, turn_cost: Option<i32>, via_proximity_cost: Option<i32>,
-               vertical_attraction_radius: i32, vertical_attraction_bonus: i32,
-               layer_costs: Option<Vec<i32>>, proximity_heuristic_cost: i32) -> Self {
+    pub fn new(
+        via_cost: i32,
+        h_weight: f32,
+        turn_cost: Option<i32>,
+        via_proximity_cost: Option<i32>,
+        vertical_attraction_radius: i32,
+        vertical_attraction_bonus: i32,
+        layer_costs: Option<Vec<i32>>,
+        proximity_heuristic_cost: i32,
+    ) -> Self {
         Self {
             via_cost,
             h_weight,
@@ -143,7 +150,11 @@ impl VisualRouter {
             let state = GridState::new(gx, gy, layer);
             let key = state.as_key();
             // Penalize starting on expensive layers
-            let layer_cost = self.layer_costs.get(layer as usize).copied().unwrap_or(1000);
+            let layer_cost = self
+                .layer_costs
+                .get(layer as usize)
+                .copied()
+                .unwrap_or(1000);
             let initial_g = layer_cost - min_layer_cost;
             let h = self.heuristic_to_targets(&state);
             self.open_set.push(OpenEntry {
@@ -196,20 +207,29 @@ impl VisualRouter {
             current_node = Some(current);
 
             // Get previous direction (parent -> current) for turn cost calculation
-            let prev_direction: Option<(i32, i32)> = self.parents.get(&current_key).map(|&parent_key| {
-                let py = ((parent_key >> 8) & 0xFFFFF) as i32;
-                let px = ((parent_key >> 28) & 0xFFFFF) as i32;
-                let px = if px & 0x80000 != 0 { px | !0xFFFFF_i32 } else { px };
-                let py = if py & 0x80000 != 0 { py | !0xFFFFF_i32 } else { py };
-                let pdx = current.gx - px;
-                let pdy = current.gy - py;
-                // Normalize to unit direction (handle vias where position is same)
-                if pdx == 0 && pdy == 0 {
-                    (0, 0) // Via (same position), no direction
-                } else {
-                    (pdx.signum(), pdy.signum())
-                }
-            });
+            let prev_direction: Option<(i32, i32)> =
+                self.parents.get(&current_key).map(|&parent_key| {
+                    let py = ((parent_key >> 8) & 0xFFFFF) as i32;
+                    let px = ((parent_key >> 28) & 0xFFFFF) as i32;
+                    let px = if px & 0x80000 != 0 {
+                        px | !0xFFFFF_i32
+                    } else {
+                        px
+                    };
+                    let py = if py & 0x80000 != 0 {
+                        py | !0xFFFFF_i32
+                    } else {
+                        py
+                    };
+                    let pdx = current.gx - px;
+                    let pdy = current.gy - py;
+                    // Normalize to unit direction (handle vias where position is same)
+                    if pdx == 0 && pdy == 0 {
+                        (0, 0) // Via (same position), no direction
+                    } else {
+                        (pdx.signum(), pdy.signum())
+                    }
+                });
 
             // Expand neighbors - 8 directions
             for (dx, dy) in DIRECTIONS {
@@ -227,14 +247,26 @@ impl VisualRouter {
                     continue;
                 }
 
-                let base_move_cost = if dx != 0 && dy != 0 { DIAG_COST } else { ORTHO_COST };
+                let base_move_cost = if dx != 0 && dy != 0 {
+                    DIAG_COST
+                } else {
+                    ORTHO_COST
+                };
                 // Apply layer cost multiplier (1000 = 1.0x, 1500 = 1.5x, etc.)
-                let layer_multiplier = self.layer_costs.get(current.layer as usize).copied().unwrap_or(1000);
+                let layer_multiplier = self
+                    .layer_costs
+                    .get(current.layer as usize)
+                    .copied()
+                    .unwrap_or(1000);
                 let move_cost = (base_move_cost as i64 * layer_multiplier as i64 / 1000) as i32;
                 // Add turn cost if direction changes (encourages straighter paths)
                 let turn_cost = match prev_direction {
                     Some((pdx, pdy)) if pdx != 0 || pdy != 0 => {
-                        if dx != pdx || dy != pdy { self.turn_cost } else { 0 }
+                        if dx != pdx || dy != pdy {
+                            self.turn_cost
+                        } else {
+                            0
+                        }
                     }
                     _ => 0, // No previous direction (source node or via)
                 };
@@ -243,8 +275,12 @@ impl VisualRouter {
                     + obstacles.get_layer_proximity_cost(ngx, ngy, current.layer as usize);
                 // Subtract attraction bonus for positions aligned with tracks on other layers
                 let attraction_bonus = obstacles.get_cross_layer_attraction(
-                    ngx, ngy, current.layer as usize,
-                    self.vertical_attraction_radius, self.vertical_attraction_bonus);
+                    ngx,
+                    ngy,
+                    current.layer as usize,
+                    self.vertical_attraction_radius,
+                    self.vertical_attraction_bonus,
+                );
                 let new_g = g + move_cost + turn_cost + proximity_cost - attraction_bonus;
 
                 let existing_g = self.g_costs.get(&neighbor_key).copied().unwrap_or(i32::MAX);
@@ -286,12 +322,25 @@ impl VisualRouter {
                     // Use zero cost for free via positions (through-hole pads on same net)
                     let is_free = obstacles.is_free_via(current.gx, current.gy);
                     let via_cost = if is_free { 0 } else { self.via_cost };
-                    let proximity_cost = (obstacles.get_stub_proximity_cost(current.gx, current.gy)
-                        + obstacles.get_layer_proximity_cost(current.gx, current.gy, layer as usize))
+                    let proximity_cost = (obstacles
+                        .get_stub_proximity_cost(current.gx, current.gy)
+                        + obstacles.get_layer_proximity_cost(
+                            current.gx,
+                            current.gy,
+                            layer as usize,
+                        ))
                         * self.via_proximity_cost;
                     // Layer transition cost: penalize switching TO expensive layers, discount switching to cheaper
-                    let current_layer_cost = self.layer_costs.get(current.layer as usize).copied().unwrap_or(1000);
-                    let dest_layer_cost = self.layer_costs.get(layer as usize).copied().unwrap_or(1000);
+                    let current_layer_cost = self
+                        .layer_costs
+                        .get(current.layer as usize)
+                        .copied()
+                        .unwrap_or(1000);
+                    let dest_layer_cost = self
+                        .layer_costs
+                        .get(layer as usize)
+                        .copied()
+                        .unwrap_or(1000);
                     let layer_transition_cost = dest_layer_cost - current_layer_cost;
                     // Combined via cost can be as low as 0 when switching to a much cheaper layer
                     let combined_via_cost = (via_cost + layer_transition_cost).max(0);
@@ -385,8 +434,16 @@ impl VisualRouter {
             let layer = (current_key & 0xFF) as u8;
             let y = ((current_key >> 8) & 0xFFFFF) as i32;
             let x = ((current_key >> 28) & 0xFFFFF) as i32;
-            let x = if x & 0x80000 != 0 { x | !0xFFFFF_i32 } else { x };
-            let y = if y & 0x80000 != 0 { y | !0xFFFFF_i32 } else { y };
+            let x = if x & 0x80000 != 0 {
+                x | !0xFFFFF_i32
+            } else {
+                x
+            };
+            let y = if y & 0x80000 != 0 {
+                y | !0xFFFFF_i32
+            } else {
+                y
+            };
 
             path.push((x, y, layer));
 
@@ -404,22 +461,32 @@ impl VisualRouter {
         // Sample closed and open sets (limit size for performance)
         const MAX_CELLS: usize = 50000;
 
-        let closed_cells: Vec<(i32, i32, u8)> = self.closed
+        let closed_cells: Vec<(i32, i32, u8)> = self
+            .closed
             .iter()
             .take(MAX_CELLS)
             .map(|&key| {
                 let layer = (key & 0xFF) as u8;
                 let y = ((key >> 8) & 0xFFFFF) as i32;
                 let x = ((key >> 28) & 0xFFFFF) as i32;
-                let x = if x & 0x80000 != 0 { x | !0xFFFFF_i32 } else { x };
-                let y = if y & 0x80000 != 0 { y | !0xFFFFF_i32 } else { y };
+                let x = if x & 0x80000 != 0 {
+                    x | !0xFFFFF_i32
+                } else {
+                    x
+                };
+                let y = if y & 0x80000 != 0 {
+                    y | !0xFFFFF_i32
+                } else {
+                    y
+                };
                 (x, y, layer)
             })
             .collect();
 
         // For open set, we need to peek at the heap without consuming
         // Since BinaryHeap doesn't allow efficient iteration, collect g_costs keys that aren't closed
-        let open_cells: Vec<(i32, i32, u8)> = self.g_costs
+        let open_cells: Vec<(i32, i32, u8)> = self
+            .g_costs
             .keys()
             .filter(|k| !self.closed.contains(k))
             .take(MAX_CELLS)
@@ -427,8 +494,16 @@ impl VisualRouter {
                 let layer = (key & 0xFF) as u8;
                 let y = ((key >> 8) & 0xFFFFF) as i32;
                 let x = ((key >> 28) & 0xFFFFF) as i32;
-                let x = if x & 0x80000 != 0 { x | !0xFFFFF_i32 } else { x };
-                let y = if y & 0x80000 != 0 { y | !0xFFFFF_i32 } else { y };
+                let x = if x & 0x80000 != 0 {
+                    x | !0xFFFFF_i32
+                } else {
+                    x
+                };
+                let y = if y & 0x80000 != 0 {
+                    y | !0xFFFFF_i32
+                } else {
+                    y
+                };
                 (x, y, layer)
             })
             .collect();

@@ -6,26 +6,26 @@
 #[cfg(feature = "python")]
 use pyo3::prelude::*;
 
-mod types;
-mod obstacle_map;
-mod router;
-#[cfg(feature = "python")]
-mod visual_router;
 #[cfg(feature = "python")]
 mod dubins;
+mod obstacle_map;
 #[cfg(feature = "python")]
 mod pose_router;
+mod router;
+mod types;
+#[cfg(feature = "python")]
+mod visual_router;
 #[cfg(feature = "wasm")]
 mod wasm;
 
 #[cfg(feature = "python")]
 pub use obstacle_map::GridObstacleMap;
 #[cfg(feature = "python")]
+pub use pose_router::PoseRouter;
+#[cfg(feature = "python")]
 pub use router::GridRouter;
 #[cfg(feature = "python")]
-pub use visual_router::{VisualRouter, SearchSnapshot};
-#[cfg(feature = "python")]
-pub use pose_router::PoseRouter;
+pub use visual_router::{SearchSnapshot, VisualRouter};
 #[cfg(feature = "wasm")]
 pub use wasm::route_simple_route_json;
 
