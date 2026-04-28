@@ -1,0 +1,28 @@
+{
+  "name": "@kicad-routing-tools/tscircuit-autorouter",
+  "version": "0.1.0",
+  "description": "WASM build of KiCadRoutingTools' Rust grid router for tscircuit custom autorouting.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "pkg-node",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build:wasm": "wasm-pack build rust_router --target nodejs --out-dir ../pkg-node --no-default-features --features wasm && bun scripts/embed-wasm-loader.mjs && bun --eval \"await Bun.write('pkg-node/.npmignore', '')\"",
+    "build:ts": "tsc --project tsconfig.json",
+    "build": "bun run build:wasm && bun run build:ts",
+    "typecheck": "tsc --noEmit --project tsconfig.json"
+  },
+  "peerDependencies": {
+    "tscircuit": ">=0.0.1686"
+  },
+  "devDependencies": {
+    "tscircuit": "^0.0.1686",
+    "typescript": "^5.8.3"
+  }
+}

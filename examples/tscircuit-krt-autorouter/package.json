@@ -1,0 +1,17 @@
+{
+  "name": "tscircuit-krt-autorouter-example",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsci build",
+    "dev": "tsci dev",
+    "typecheck": "tsc --noEmit --project tsconfig.json"
+  },
+  "dependencies": {
+    "@kicad-routing-tools/tscircuit-autorouter": "file:vendor/krt-autorouter",
+    "tscircuit": "^0.0.1686"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}

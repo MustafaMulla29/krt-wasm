@@ -3,22 +3,35 @@
 //! This is a high-performance implementation of the grid router algorithm.
 //! It's designed to be called from Python via PyO3 bindings.
 
+#[cfg(feature = "python")]
 use pyo3::prelude::*;
 
 mod types;
 mod obstacle_map;
 mod router;
+#[cfg(feature = "python")]
 mod visual_router;
+#[cfg(feature = "python")]
 mod dubins;
+#[cfg(feature = "python")]
 mod pose_router;
+#[cfg(feature = "wasm")]
+mod wasm;
 
+#[cfg(feature = "python")]
 pub use obstacle_map::GridObstacleMap;
+#[cfg(feature = "python")]
 pub use router::GridRouter;
+#[cfg(feature = "python")]
 pub use visual_router::{VisualRouter, SearchSnapshot};
+#[cfg(feature = "python")]
 pub use pose_router::PoseRouter;
+#[cfg(feature = "wasm")]
+pub use wasm::route_simple_route_json;
 
 /// Try to release unused memory back to the OS.
 /// This is a hint to the allocator and may not have immediate effect.
+#[cfg(feature = "python")]
 #[pyfunction]
 fn release_memory() {
     // On most platforms, dropping collections and calling shrink_to_fit
@@ -34,6 +47,7 @@ fn release_memory() {
 }
 
 /// Python module
+#[cfg(feature = "python")]
 #[pymodule]
 fn grid_router(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;

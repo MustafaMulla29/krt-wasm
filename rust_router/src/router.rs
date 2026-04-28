@@ -1,5 +1,6 @@
 //! Grid-based A* router implementation.
 
+#[cfg(feature = "python")]
 use pyo3::prelude::*;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::BinaryHeap;
@@ -8,7 +9,7 @@ use crate::obstacle_map::GridObstacleMap;
 use crate::types::{GridState, OpenEntry, BlockedCellTracker, RouteStats, DIRECTIONS, ORTHO_COST, DIAG_COST, DEFAULT_TURN_COST};
 
 /// Grid A* Router
-#[pyclass]
+#[cfg_attr(feature = "python", pyclass)]
 pub struct GridRouter {
     via_cost: i32,
     h_weight: f32,
@@ -29,11 +30,8 @@ pub struct GridRouter {
     attraction_path_hash: FxHashMap<u64, i32>,  // cell_key -> min distance to path point in that cell
 }
 
-#[pymethods]
 impl GridRouter {
-    #[new]
-    #[pyo3(signature = (via_cost, h_weight, turn_cost=None, via_proximity_cost=1, vertical_attraction_radius=0, vertical_attraction_bonus=0, layer_costs=None, proximity_heuristic_cost=None, layer_direction_preferences=None, direction_preference_cost=0, attraction_radius=0, attraction_bonus=0))]
-    pub fn new(via_cost: i32, h_weight: f32, turn_cost: Option<i32>, via_proximity_cost: Option<i32>,
+    pub fn new_core(via_cost: i32, h_weight: f32, turn_cost: Option<i32>, via_proximity_cost: Option<i32>,
                vertical_attraction_radius: i32, vertical_attraction_bonus: i32,
                layer_costs: Option<Vec<i32>>, proximity_heuristic_cost: Option<i32>,
                layer_direction_preferences: Option<Vec<u8>>, direction_preference_cost: i32,
@@ -58,7 +56,7 @@ impl GridRouter {
 
     /// Set the proximity heuristic cost for subsequent routes.
     /// Call this before each route to adjust based on whether endpoints are in proximity zones.
-    pub fn set_proximity_heuristic_cost(&mut self, cost: i32) {
+    pub fn set_proximity_heuristic_cost_core(&mut self, cost: i32) {
         self.proximity_heuristic_cost = cost;
     }
 
@@ -68,7 +66,7 @@ impl GridRouter {
     /// direction the neighbor was moving, not just proximity.
     /// Call this before routing each subsequent bus member with the previously routed path.
     /// Pass an empty Vec to clear the attraction.
-    pub fn set_attraction_path(&mut self, path: Vec<(i32, i32, u8)>) {
+    pub fn set_attraction_path_core(&mut self, path: Vec<(i32, i32, u8)>) {
         self.attraction_path_hash.clear();
         self.attraction_path.clear();
 
@@ -126,7 +124,7 @@ impl GridRouter {
     }
 
     /// Clear the attraction path
-    pub fn clear_attraction_path(&mut self) {
+    pub fn clear_attraction_path_core(&mut self) {
         self.attraction_path.clear();
         self.attraction_path_hash.clear();
     }
@@ -147,8 +145,7 @@ impl GridRouter {
     /// direction_steps: Number of steps to constrain at start (default 2).
     /// track_margin: Extra margin in grid cells for wide tracks (e.g., power nets).
     /// When > 0, checks cells within this radius for obstacles.
-    #[pyo3(signature = (obstacles, sources, targets, max_iterations, collinear_vias=false, via_exclusion_radius=0, start_direction=None, end_direction=None, direction_steps=2, track_margin=0))]
-    pub fn route_multi(
+    pub fn route_multi_core(
         &self,
         obstacles: &GridObstacleMap,
         sources: Vec<(i32, i32, u8)>,
@@ -614,8 +611,7 @@ impl GridRouter {
     /// Returns (path, iterations, blocked_cells) where:
     /// - On success: path is Some, blocked_cells is empty
     /// - On failure: path is None, blocked_cells contains cells that blocked expansion
-    #[pyo3(signature = (obstacles, sources, targets, max_iterations, collinear_vias=false, via_exclusion_radius=0, start_direction=None, end_direction=None, direction_steps=2, track_margin=0))]
-    pub fn route_with_frontier(
+    pub fn route_with_frontier_core(
         &self,
         obstacles: &GridObstacleMap,
         sources: Vec<(i32, i32, u8)>,
@@ -903,6 +899,101 @@ impl GridRouter {
         }
 
         (None, iterations, tracker.get_blocked())
+    }
+}
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl GridRouter {
+    #[new]
+    #[pyo3(signature = (via_cost, h_weight, turn_cost=None, via_proximity_cost=1, vertical_attraction_radius=0, vertical_attraction_bonus=0, layer_costs=None, proximity_heuristic_cost=None, layer_direction_preferences=None, direction_preference_cost=0, attraction_radius=0, attraction_bonus=0))]
+    pub fn new(via_cost: i32, h_weight: f32, turn_cost: Option<i32>, via_proximity_cost: Option<i32>,
+               vertical_attraction_radius: i32, vertical_attraction_bonus: i32,
+               layer_costs: Option<Vec<i32>>, proximity_heuristic_cost: Option<i32>,
+               layer_direction_preferences: Option<Vec<u8>>, direction_preference_cost: i32,
+               attraction_radius: i32, attraction_bonus: i32) -> Self {
+        Self::new_core(
+            via_cost,
+            h_weight,
+            turn_cost,
+            via_proximity_cost,
+            vertical_attraction_radius,
+            vertical_attraction_bonus,
+            layer_costs,
+            proximity_heuristic_cost,
+            layer_direction_preferences,
+            direction_preference_cost,
+            attraction_radius,
+            attraction_bonus,
+        )
+    }
+
+    pub fn set_proximity_heuristic_cost(&mut self, cost: i32) {
+        self.set_proximity_heuristic_cost_core(cost);
+    }
+
+    pub fn set_attraction_path(&mut self, path: Vec<(i32, i32, u8)>) {
+        self.set_attraction_path_core(path);
+    }
+
+    pub fn clear_attraction_path(&mut self) {
+        self.clear_attraction_path_core();
+    }
+
+    #[pyo3(signature = (obstacles, sources, targets, max_iterations, collinear_vias=false, via_exclusion_radius=0, start_direction=None, end_direction=None, direction_steps=2, track_margin=0))]
+    pub fn route_multi(
+        &self,
+        obstacles: &GridObstacleMap,
+        sources: Vec<(i32, i32, u8)>,
+        targets: Vec<(i32, i32, u8)>,
+        max_iterations: u32,
+        collinear_vias: bool,
+        via_exclusion_radius: i32,
+        start_direction: Option<(i32, i32)>,
+        end_direction: Option<(f64, f64)>,
+        direction_steps: i32,
+        track_margin: i32,
+    ) -> (Option<Vec<(i32, i32, u8)>>, u32, std::collections::HashMap<String, f64>) {
+        self.route_multi_core(
+            obstacles,
+            sources,
+            targets,
+            max_iterations,
+            collinear_vias,
+            via_exclusion_radius,
+            start_direction,
+            end_direction,
+            direction_steps,
+            track_margin,
+        )
+    }
+
+    #[pyo3(signature = (obstacles, sources, targets, max_iterations, collinear_vias=false, via_exclusion_radius=0, start_direction=None, end_direction=None, direction_steps=2, track_margin=0))]
+    pub fn route_with_frontier(
+        &self,
+        obstacles: &GridObstacleMap,
+        sources: Vec<(i32, i32, u8)>,
+        targets: Vec<(i32, i32, u8)>,
+        max_iterations: u32,
+        collinear_vias: bool,
+        via_exclusion_radius: i32,
+        start_direction: Option<(i32, i32)>,
+        end_direction: Option<(f64, f64)>,
+        direction_steps: i32,
+        track_margin: i32,
+    ) -> (Option<Vec<(i32, i32, u8)>>, u32, Vec<(i32, i32, u8)>) {
+        self.route_with_frontier_core(
+            obstacles,
+            sources,
+            targets,
+            max_iterations,
+            collinear_vias,
+            via_exclusion_radius,
+            start_direction,
+            end_direction,
+            direction_steps,
+            track_margin,
+        )
     }
 }
 

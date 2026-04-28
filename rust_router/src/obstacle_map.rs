@@ -1,6 +1,8 @@
 //! Grid-based obstacle map for PCB routing.
 
+#[cfg(feature = "python")]
 use pyo3::prelude::*;
+#[cfg(feature = "python")]
 use numpy::PyReadonlyArray2;
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -9,7 +11,7 @@ use crate::types::pack_xy;
 /// Grid-based obstacle map with reference counting for incremental updates.
 /// Reference counting allows cells blocked by multiple nets to be correctly
 /// managed when nets are added/removed.
-#[pyclass]
+#[cfg_attr(feature = "python", pyclass)]
 pub struct GridObstacleMap {
     /// Blocked cells per layer: layer -> map of (gx, gy) packed as u64 -> ref count
     /// A cell is blocked if its ref count > 0
@@ -21,7 +23,6 @@ pub struct GridObstacleMap {
     /// Layer-specific proximity costs (for track proximity on same layer)
     pub layer_proximity_costs: Vec<FxHashMap<u64, i32>>,
     /// Number of layers
-    #[pyo3(get)]
     pub num_layers: usize,
     /// BGA exclusion zones (min_gx, min_gy, max_gx, max_gy) - multiple zones supported
     pub bga_zones: Vec<(i32, i32, i32, i32)>,
@@ -45,9 +46,7 @@ pub struct GridObstacleMap {
     pub free_via_positions: FxHashSet<u64>,
 }
 
-#[pymethods]
 impl GridObstacleMap {
-    #[new]
     pub fn new(num_layers: usize) -> Self {
         Self {
             blocked_cells: (0..num_layers).map(|_| FxHashMap::default()).collect(),
@@ -99,7 +98,6 @@ impl GridObstacleMap {
     }
 
     /// Create a deep copy of this obstacle map
-    #[pyo3(name = "clone")]
     pub fn py_clone(&self) -> Self {
         Self {
             blocked_cells: self.blocked_cells.clone(),
@@ -210,6 +208,7 @@ impl GridObstacleMap {
     }
 
     /// Batch add blocked cells from numpy array (shape: N x 3, columns: gx, gy, layer)
+    #[cfg(feature = "python")]
     pub fn add_blocked_cells_batch(&mut self, cells: PyReadonlyArray2<i32>) {
         let arr = cells.as_array();
         for row in arr.rows() {
@@ -224,6 +223,7 @@ impl GridObstacleMap {
     }
 
     /// Batch add blocked vias from numpy array (shape: N x 2, columns: gx, gy)
+    #[cfg(feature = "python")]
     pub fn add_blocked_vias_batch(&mut self, vias: PyReadonlyArray2<i32>) {
         let arr = vias.as_array();
         for row in arr.rows() {
@@ -250,6 +250,7 @@ impl GridObstacleMap {
     }
 
     /// Remove blocked cells from numpy array (decrements reference count, removes entry when count reaches 0)
+    #[cfg(feature = "python")]
     pub fn remove_blocked_cells_batch(&mut self, cells: PyReadonlyArray2<i32>) {
         let arr = cells.as_array();
         for row in arr.rows() {
@@ -270,6 +271,7 @@ impl GridObstacleMap {
     }
 
     /// Remove blocked vias from numpy array (decrements reference count, removes entry when count reaches 0)
+    #[cfg(feature = "python")]
     pub fn remove_blocked_vias_batch(&mut self, vias: PyReadonlyArray2<i32>) {
         let arr = vias.as_array();
         for row in arr.rows() {
@@ -476,6 +478,7 @@ impl GridObstacleMap {
 
     /// Batch set layer proximity costs from numpy array
     /// Array should have shape (N, 4) with columns [layer, gx, gy, cost]
+    #[cfg(feature = "python")]
     pub fn set_layer_proximity_batch(&mut self, costs: PyReadonlyArray2<i32>) {
         let arr = costs.as_array();
         for row in arr.rows() {
@@ -605,5 +608,233 @@ impl GridObstacleMap {
         for (gx, gy) in positions {
             self.free_via_positions.insert(pack_xy(gx, gy));
         }
+    }
+}
+
+#[cfg(feature = "python")]
+#[pymethods]
+impl GridObstacleMap {
+    #[new]
+    fn py_new(num_layers: usize) -> Self {
+        Self::new(num_layers)
+    }
+
+    #[getter]
+    fn py_num_layers(&self) -> usize {
+        self.num_layers
+    }
+
+    #[pyo3(name = "set_endpoint_exempt")]
+    fn py_set_endpoint_exempt(&mut self, positions: Vec<(i32, i32)>, radius: i32) {
+        self.set_endpoint_exempt(positions, radius);
+    }
+
+    #[pyo3(name = "clear_endpoint_exempt")]
+    fn py_clear_endpoint_exempt(&mut self) {
+        self.clear_endpoint_exempt();
+    }
+
+    #[pyo3(name = "set_bga_proximity_radius")]
+    fn py_set_bga_proximity_radius(&mut self, radius: i32) {
+        self.set_bga_proximity_radius(radius);
+    }
+
+    #[pyo3(name = "add_source_target_cell")]
+    fn py_add_source_target_cell(&mut self, gx: i32, gy: i32, layer: usize) {
+        self.add_source_target_cell(gx, gy, layer);
+    }
+
+    #[pyo3(name = "clear_source_target_cells")]
+    fn py_clear_source_target_cells(&mut self) {
+        self.clear_source_target_cells();
+    }
+
+    #[pyo3(name = "clone")]
+    fn py_clone_for_python(&self) -> Self {
+        self.py_clone()
+    }
+
+    #[pyo3(name = "clone_fresh")]
+    fn py_clone_fresh(&self) -> Self {
+        self.clone_fresh()
+    }
+
+    #[pyo3(name = "get_stats")]
+    fn py_get_stats(&self) -> (usize, usize, usize, usize, usize, usize, usize) {
+        self.get_stats()
+    }
+
+    #[pyo3(name = "clear_stub_proximity")]
+    fn py_clear_stub_proximity(&mut self) {
+        self.clear_stub_proximity();
+    }
+
+    #[pyo3(name = "shrink_to_fit")]
+    fn py_shrink_to_fit(&mut self) {
+        self.shrink_to_fit();
+    }
+
+    #[pyo3(name = "clear_allowed_cells")]
+    fn py_clear_allowed_cells(&mut self) {
+        self.clear_allowed_cells();
+    }
+
+    #[pyo3(name = "add_allowed_cell")]
+    fn py_add_allowed_cell(&mut self, gx: i32, gy: i32) {
+        self.add_allowed_cell(gx, gy);
+    }
+
+    #[pyo3(name = "set_bga_zone")]
+    fn py_set_bga_zone(&mut self, min_gx: i32, min_gy: i32, max_gx: i32, max_gy: i32) {
+        self.set_bga_zone(min_gx, min_gy, max_gx, max_gy);
+    }
+
+    #[pyo3(name = "add_blocked_cell")]
+    fn py_add_blocked_cell(&mut self, gx: i32, gy: i32, layer: usize) {
+        self.add_blocked_cell(gx, gy, layer);
+    }
+
+    #[pyo3(name = "add_blocked_via")]
+    fn py_add_blocked_via(&mut self, gx: i32, gy: i32) {
+        self.add_blocked_via(gx, gy);
+    }
+
+    #[pyo3(name = "add_blocked_cells_batch")]
+    fn py_add_blocked_cells_batch(&mut self, cells: PyReadonlyArray2<i32>) {
+        self.add_blocked_cells_batch(cells);
+    }
+
+    #[pyo3(name = "add_blocked_vias_batch")]
+    fn py_add_blocked_vias_batch(&mut self, vias: PyReadonlyArray2<i32>) {
+        self.add_blocked_vias_batch(vias);
+    }
+
+    #[pyo3(name = "merge_blocked_from")]
+    fn py_merge_blocked_from(&mut self, other: &GridObstacleMap) {
+        self.merge_blocked_from(other);
+    }
+
+    #[pyo3(name = "remove_blocked_cells_batch")]
+    fn py_remove_blocked_cells_batch(&mut self, cells: PyReadonlyArray2<i32>) {
+        self.remove_blocked_cells_batch(cells);
+    }
+
+    #[pyo3(name = "remove_blocked_vias_batch")]
+    fn py_remove_blocked_vias_batch(&mut self, vias: PyReadonlyArray2<i32>) {
+        self.remove_blocked_vias_batch(vias);
+    }
+
+    #[pyo3(name = "set_stub_proximity")]
+    fn py_set_stub_proximity(&mut self, gx: i32, gy: i32, cost: i32) {
+        self.set_stub_proximity(gx, gy, cost);
+    }
+
+    #[pyo3(name = "add_stub_proximity_costs_batch")]
+    fn py_add_stub_proximity_costs_batch(
+        &mut self,
+        stubs: Vec<(i32, i32)>,
+        radius: i32,
+        max_cost: i32,
+        block_vias: bool,
+    ) {
+        self.add_stub_proximity_costs_batch(stubs, radius, max_cost, block_vias);
+    }
+
+    #[pyo3(name = "is_blocked")]
+    fn py_is_blocked(&self, gx: i32, gy: i32, layer: usize) -> bool {
+        self.is_blocked(gx, gy, layer)
+    }
+
+    #[pyo3(name = "is_blocked_with_margin")]
+    fn py_is_blocked_with_margin(&self, gx: i32, gy: i32, layer: usize, margin: i32) -> bool {
+        self.is_blocked_with_margin(gx, gy, layer, margin)
+    }
+
+    #[pyo3(name = "is_via_blocked")]
+    fn py_is_via_blocked(&self, gx: i32, gy: i32) -> bool {
+        self.is_via_blocked(gx, gy)
+    }
+
+    #[pyo3(name = "is_in_bga_proximity")]
+    fn py_is_in_bga_proximity(&self, gx: i32, gy: i32) -> bool {
+        self.is_in_bga_proximity(gx, gy)
+    }
+
+    #[pyo3(name = "is_in_any_proximity_zone")]
+    fn py_is_in_any_proximity_zone(&self, gx: i32, gy: i32) -> bool {
+        self.is_in_any_proximity_zone(gx, gy)
+    }
+
+    #[pyo3(name = "get_stub_proximity_cost")]
+    fn py_get_stub_proximity_cost(&self, gx: i32, gy: i32) -> i32 {
+        self.get_stub_proximity_cost(gx, gy)
+    }
+
+    #[pyo3(name = "set_layer_proximity")]
+    fn py_set_layer_proximity(&mut self, gx: i32, gy: i32, layer: usize, cost: i32) {
+        self.set_layer_proximity(gx, gy, layer, cost);
+    }
+
+    #[pyo3(name = "set_layer_proximity_batch")]
+    fn py_set_layer_proximity_batch(&mut self, costs: PyReadonlyArray2<i32>) {
+        self.set_layer_proximity_batch(costs);
+    }
+
+    #[pyo3(name = "get_layer_proximity_cost")]
+    fn py_get_layer_proximity_cost(&self, gx: i32, gy: i32, layer: usize) -> i32 {
+        self.get_layer_proximity_cost(gx, gy, layer)
+    }
+
+    #[pyo3(name = "clear_layer_proximity")]
+    fn py_clear_layer_proximity(&mut self) {
+        self.clear_layer_proximity();
+    }
+
+    #[pyo3(name = "add_cross_layer_track")]
+    fn py_add_cross_layer_track(&mut self, gx: i32, gy: i32, layer: usize) {
+        self.add_cross_layer_track(gx, gy, layer);
+    }
+
+    #[pyo3(name = "get_cross_layer_attraction")]
+    fn py_get_cross_layer_attraction(
+        &self,
+        gx: i32,
+        gy: i32,
+        current_layer: usize,
+        attraction_radius: i32,
+        attraction_bonus: i32,
+    ) -> i32 {
+        self.get_cross_layer_attraction(
+            gx,
+            gy,
+            current_layer,
+            attraction_radius,
+            attraction_bonus,
+        )
+    }
+
+    #[pyo3(name = "clear_cross_layer_tracks")]
+    fn py_clear_cross_layer_tracks(&mut self) {
+        self.clear_cross_layer_tracks();
+    }
+
+    #[pyo3(name = "add_free_via")]
+    fn py_add_free_via(&mut self, gx: i32, gy: i32) {
+        self.add_free_via(gx, gy);
+    }
+
+    #[pyo3(name = "is_free_via")]
+    fn py_is_free_via(&self, gx: i32, gy: i32) -> bool {
+        self.is_free_via(gx, gy)
+    }
+
+    #[pyo3(name = "clear_free_vias")]
+    fn py_clear_free_vias(&mut self) {
+        self.clear_free_vias();
+    }
+
+    #[pyo3(name = "add_free_vias_batch")]
+    fn py_add_free_vias_batch(&mut self, positions: Vec<(i32, i32)>) {
+        self.add_free_vias_batch(positions);
     }
 }

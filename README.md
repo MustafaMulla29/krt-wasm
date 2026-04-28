@@ -129,6 +129,47 @@ python route_diff.py my_board.kicad_pcb --nets "*lvds*"
 python route_planes.py my_board.kicad_pcb --nets GND --plane-layers B.Cu
 ```
 
+### Option D: tscircuit Custom Autorouter (WASM/npm)
+
+This repo can also build an npm package that exposes the Rust KRT
+`GridRouter` through WASM for tscircuit's `autorouter={{ algorithmFn }}` API.
+
+```bash
+bun install
+bun run build
+```
+
+Use it from a tscircuit board like this:
+
+```tsx
+import { createKiCadRoutingToolsAutorouter } from "@kicad-routing-tools/tscircuit-autorouter"
+
+export default () => (
+  <board
+    width="34mm"
+    height="22mm"
+    layers={4}
+    autorouter={{
+      algorithmFn: createKiCadRoutingToolsAutorouter({
+        gridStep: 0.1,
+        clearance: 0.2,
+        maxIterations: 300_000,
+      }),
+    }}
+  >
+    {/* components and traces */}
+  </board>
+)
+```
+
+The npm wrapper accepts tscircuit `SimpleRouteJson`, initializes the WASM module,
+builds a KRT `GridObstacleMap`, and routes each connection with the same Rust
+`GridRouter::route_multi` core used by the KiCad/Python path. The full KiCad
+plugin still has additional Python-side orchestration for KiCad files,
+differential pairs, planes, fanout, net ordering, and KiCad output writing; the
+WASM package is the KRT grid-router core adapted to tscircuit's simplified route
+format.
+
 ---
 
 ## KiCad Plugin
