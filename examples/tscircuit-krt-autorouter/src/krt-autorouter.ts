@@ -5,7 +5,8 @@ export const krtAutorouter = {
     gridStep: 0.2,
     clearance: 0.18,
     maxIterations: 500_000,
-    viaCost: 80_000,
+    viaCost: 20_000_000,
     hWeight: 1.2,
+    layerCosts: [0, 1_000_000, 1_000_000, 1_000_000],
   }),
 }

@@ -116,8 +116,8 @@ export default () => (
     <trace from=".U_SOIC > .pin4" to=".J_PWR > .pin1" />
     <trace from=".U_SOIC > .pin7" to=".J_PWR > .pin2" />
     <trace from=".U_TSSOP > .pin4" to=".J_PWR > .pin3" />
-    <trace from=".U_TSSOP > .pin5" to=".J_IO > .pin1" />
-    <trace from=".U_TSSOP > .pin6" to=".J_IO > .pin2" />
-    <trace from=".U_TSSOP > .pin7" to=".J_IO > .pin3" />
+    <trace from=".U_TSSOP > .pin8" to=".J_IO > .pin1" />
+    <trace from=".U_TSSOP > .pin12" to=".J_IO > .pin2" />
+    <trace from=".U_TSSOP > .pin1" to=".J_IO > .pin3" />
   </board>
 )
