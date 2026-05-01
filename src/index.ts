@@ -22,6 +22,7 @@ export interface KiCadRoutingToolsAutorouterOptions {
   layerCosts?: number[]
   layerDirectionPreferences?: number[]
   directionPreferenceCost?: number
+  collapseShortSameLayerTunnels?: boolean
 }
 
 export async function initKiCadRoutingToolsAutorouter() {
@@ -101,7 +102,9 @@ export class KiCadRoutingToolsAutorouter implements GenericLocalAutorouter {
       this.input,
       normalizeOptions(this.options),
     ) as SimplifiedPcbTrace[]
-    this.cachedTraces = collapseShortSameLayerTunnels(this.cachedTraces)
+    if (this.options.collapseShortSameLayerTunnels ?? true) {
+      this.cachedTraces = collapseShortSameLayerTunnels(this.cachedTraces)
+    }
     return this.cachedTraces
   }
 
