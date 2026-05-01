@@ -1,7 +1,7 @@
 {
-  "name": "@kicad-routing-tools/tscircuit-autorouter",
+  "name": "@tscircuit/krt-wasm",
   "version": "0.1.0",
-  "description": "WASM build of KiCadRoutingTools' Rust grid router for tscircuit custom autorouting.",
+  "description": "Fork of KiCad Routing Tools packaged as a WASM autorouter for tscircuit.",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",

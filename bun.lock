@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "@kicad-routing-tools/tscircuit-autorouter",
+      "name": "@tscircuit/krt-wasm",
       "devDependencies": {
         "tscircuit": "^0.0.1686",
         "typescript": "^5.8.3",
