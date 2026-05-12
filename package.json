@@ -16,12 +16,19 @@
     "build:wasm": "wasm-pack build rust_router --target nodejs --out-dir ../pkg-node --no-default-features --features wasm && bun scripts/embed-wasm-loader.mjs && bun --eval \"await Bun.write('pkg-node/.npmignore', '')\"",
     "build:ts": "tsc --project tsconfig.json",
     "build": "bun run build:wasm && bun run build:ts",
-    "typecheck": "tsc --noEmit --project tsconfig.json"
+    "typecheck": "tsc --noEmit --project tsconfig.json",
+    "test": "bun test tests/visual-snapshots",
+    "test:update": "BUN_UPDATE_SNAPSHOTS=1 bun test tests/visual-snapshots"
   },
   "peerDependencies": {
     "tscircuit": ">=0.0.1686"
   },
   "devDependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "@types/bun": "^1.2.23",
+    "circuit-to-svg": "^0.0.345",
+    "looks-same": "^9.0.1",
+    "react": "^19.1.0",
     "tscircuit": "^0.0.1686",
     "typescript": "^5.8.3"
   }
