@@ -29,7 +29,7 @@
     "circuit-to-svg": "^0.0.345",
     "looks-same": "^9.0.1",
     "react": "^19.1.0",
-    "tscircuit": "^0.0.1686",
+    "tscircuit": "^0.0.1757",
     "typescript": "^5.8.3"
   }
 }

@@ -78,6 +78,21 @@ impl GridObstacleMap {
         self.endpoint_exempt_radius = 0;
     }
 
+    /// Check if a grid position is close enough to an endpoint to be routed
+    /// with endpoint-specific clearance handling.
+    #[inline]
+    fn is_endpoint_exempt_position(&self, gx: i32, gy: i32) -> bool {
+        if self.endpoint_exempt_radius <= 0 {
+            return false;
+        }
+
+        self.endpoint_exempt_positions.iter().any(|(endpoint_x, endpoint_y)| {
+            let dx = gx - endpoint_x;
+            let dy = gy - endpoint_y;
+            dx * dx + dy * dy <= self.endpoint_exempt_radius * self.endpoint_exempt_radius
+        })
+    }
+
     /// Set BGA proximity radius in grid units (for vertical attraction exclusion)
     pub fn set_bga_proximity_radius(&mut self, radius: i32) {
         self.bga_proximity_radius = radius;
@@ -395,6 +410,10 @@ impl GridObstacleMap {
     #[inline]
     pub fn is_blocked_with_margin(&self, gx: i32, gy: i32, layer: usize, margin: i32) -> bool {
         if margin <= 0 {
+            return self.is_blocked(gx, gy, layer);
+        }
+
+        if self.is_endpoint_exempt_position(gx, gy) {
             return self.is_blocked(gx, gy, layer);
         }
 
