@@ -33,6 +33,8 @@ jobs:
       - run: npm install -g pver
       - run: bun install --frozen-lockfile
       - run: bun run build
+      - name: Restore committed WASM package
+        run: git restore pkg-node
       - run: pver release --no-push-main
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
